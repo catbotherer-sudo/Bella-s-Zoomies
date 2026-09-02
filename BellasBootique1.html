@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Bella's Midnight Zoomies</title>
+<style>
+* {
+box-sizing: border-box;
+user-select: none;
+-webkit-user-select: none;
+touch-action: manipulation;
+}
+body {
+margin: 0;
+padding: 0;
+background-color: #1a1a2e;
+color: #ffffff;
+font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+min-height: 100vh;
+overflow: hidden;
+}
+#game-container {
+position: relative;
+width: 100vw;
+max-width: 420px;
+height: 100vh;
+max-height: 750px;
+background: linear-gradient(to bottom, #0f0c20, #2b1b36);
+border-radius: 12px;
+overflow: hidden;
+box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+canvas {
+display: block;
+width: 100%;
+height: 100%;
+}
+.ui-overlay {
+position: absolute;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+pointer-events: none;
+display: flex;
+flex-direction: column;
+justify-content: space-between;
+padding: 20px;
+}
+.hud {
+display: flex;
+justify-content: space-between;
+font-size: 1.2rem;
+font-weight: bold;
+text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+}
+.screen {
+position: absolute;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+background: rgba(15, 12, 32, 0.85);
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+padding: 30px;
+text-align: center;
+pointer-events: auto;
+z-index: 10;
+}
+h1 {
+font-size: 2rem;
+margin-bottom: 10px;
+color: #f39c12;
+text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+p {
+font-size: 1rem;
+line-height: 1.5;
+color: #dcdde1;
+margin-bottom: 25px;
+}
+.btn {
+background: #e67e22;
+color: white;
+border: none;
+padding: 15px 32px;
+font-size: 1.2rem;
+font-weight: bold;
+border-radius: 30px;
+cursor: pointer;
+box-shadow: 0 4px 15px rgba(230, 126, 34, 0.4);
+transition: transform 0.1s, background 0.2s;
+}
+.btn:active {
+transform: scale(0.95);
+background: #d35400;
+}
+.hidden {
+display: none !important;
+}
+</style>
+</head>
+<body>
+
+<div id="game-container">
+<canvas id="gameCanvas"></canvas>
+
+<div class="ui-overlay">
+<div class="hud">
+<div id="scoreDisplay">Mice: 0</div>
+<div id="livesDisplay">Lives: ❤️❤️❤️</div>
+</div>
+</div>
+
+<!-- Start Screen -->
+<div id="startScreen" class="screen">
+<h1>Bella's Midnight Zoomies</h1>
+<p>Help Bella catch as many toy mice as she can during her midnight zoomies!<br><br>Avoid the laundry socks, and catch catnip treats for speed boosts!</p>
+<p style="font-size: 0.9rem; color: #f1c40f;">Tap Left / Right side of the screen to move.</p>
+<button class="btn" id="startBtn">START ZOOMIES</button>
+</div>
+
+<!-- Game Over Screen -->
+<div id="gameOverScreen" class="screen hidden">
+<h1>Zoomies Over!</h1>
+<p id="finalScore">Bella caught 0 mice!</p>
+<button class="btn" id="restartBtn">PLAY AGAIN</button>
+</div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const container = document.getElementById('game-container');
+
+function resizeCanvas() {
+canvas.width = container.clientWidth;
+canvas.height = container.clientHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+let gameActive = false;
+let score = 0;
+let lives = 3;
+let frameCount = 0;
+let spawnRate = 60;
+let speedMultiplier = 1;
+
+let moveLeft = false;
+let moveRight = false;
+
+const bella = {
+x: 0,
+y: 0,
+width: 60,
+height: 50,
+speed: 7,
+direction: 'right',
+
+init() {
+this.x = canvas.width / 2 - this.width / 2;
+this.y = canvas.height - this.height - 25;
+},
+
+draw() {
+ctx.save();
+ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+if (this.direction === 'left') {
+ctx.scale(-1, 1);
+}
+
+// Body
+ctx.fillStyle = '#4a2c11';
+ctx.beginPath();
+ctx.ellipse(0, 5, 25, 18, 0, 0, Math.PI * 2);
+ctx.fill();
+
+// Head
+ctx.beginPath();
+ctx.arc(15, -8, 14, 0, Math.PI * 2);
+ctx.fill();
+
+// Ears
+ctx.fillStyle = '#36200c';
+ctx.beginPath();
+ctx.moveTo(8, -18);
+ctx.lineTo(15, -28);
+ctx.lineTo(20, -18);
+ctx.fill();
+
+ctx.beginPath();
+ctx.moveTo(18, -18);
+ctx.lineTo(25, -27);
+ctx.lineTo(28, -15);
+ctx.fill();
+
+// Eyes
+ctx.fillStyle = '#f1c40f';
+ctx.beginPath();
+ctx.arc(20, -10, 3, 0, Math.PI * 2);
+ctx.fill();
+
+// Tail
+ctx.strokeStyle = '#36200c';
+ctx.lineWidth = 5;
+ctx.lineCap = 'round';
+ctx.beginPath();
+ctx.moveTo(-20, 5);
+ctx.quadraticCurveTo(-35, -10, -25, -20);
+ctx.stroke();
+
+ctx.restore();
+},
+
+update() {
+if (moveLeft && this.x > 0) {
+this.x -= this.speed * speedMultiplier;
+this.direction = 'left';
+}
+if (moveRight && this.x + this.width < canvas.width) {
+this.x += this.speed * speedMultiplier;
+this.direction = 'right';
+}
+}
+};
+
+let items = [];
+
+class Item {
+constructor() {
+this.width = 30;
+this.height = 30;
+this.x = Math.random() * (canvas.width - this.width);
+this.y = -this.height;
+this.speed = (Math.random() * 2 + 3) * speedMultiplier;
+
+const rand = Math.random();
+if (rand < 0.65) {
+this.type = 'mouse';
+} else if (rand < 0.85) {
+this.type = 'sock';
+} else {
+this.type = 'nip';
+}
+}
+
+draw() {
+ctx.save();
+ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+
+if (this.type === 'mouse') {
+ctx.fillStyle = '#95a5a6';
+ctx.beginPath();
+ctx.ellipse(0, 0, 12, 8, 0, 0, Math.PI * 2);
+ctx.fill();
+
+ctx.fillStyle = '#e84393';
+ctx.beginPath();
+ctx.arc(-2, -5, 3, 0, Math.PI * 2);
+ctx.fill();
+
+ctx.strokeStyle = '#e84393';
+ctx.lineWidth = 2;
+ctx.beginPath();
+ctx.moveTo(-12, 0);
+ctx.lineTo(-20, -5);
+ctx.stroke();
+} else if (this.type === 'sock') {
+ctx.fillStyle = '#e74c3c';
+ctx.fillRect(-8, -10, 16, 20);
+ctx.fillStyle = '#ffffff';
+ctx.fillRect(-8, -10, 16, 4);
+} else if (this.type === 'nip') {
+ctx.fillStyle = '#2ecc71';
+ctx.beginPath();
+ctx.ellipse(0, 0, 10, 14, Math.PI / 4, 0, Math.PI * 2);
+ctx.fill();
+}
+
+ctx.restore();
+}
+
+update() {
+this.y += this.speed;
+}
+}
+
+window.addEventListener('touchstart', (e) => {
+if (!gameActive) return;
+const touchX = e.touches[0].clientX;
+const screenWidth = window.innerWidth;
+if (touchX < screenWidth / 2) {
+moveLeft = true;
+moveRight = false;
+} else {
+moveRight = true;
+moveLeft = false;
+}
+});
+
+window.addEventListener('touchend', () => {
+moveLeft = false;
+moveRight = false;
+});
+
+window.addEventListener('keydown', (e) => {
+if (e.key === 'ArrowLeft' || e.key === 'a') moveLeft = true;
+if (e.key === 'ArrowRight' || e.key === 'd') moveRight = true;
+});
+
+window.addEventListener('keyup', (e) => {
+if (e.key === 'ArrowLeft' || e.key === 'a') moveLeft = false;
+if (e.key === 'ArrowRight' || e.key === 'd') moveRight = false;
+});
+
+function updateUI() {
+document.getElementById('scoreDisplay').innerText = Mice: ${score}; document.getElementById('livesDisplay').innerText =Lives: ${'❤️'.repeat(lives)};
+}
+
+function startGame() {
+score = 0;
+lives = 3;
+items = [];
+frameCount = 0;
+speedMultiplier = 1;
+gameActive = true;
+
+bella.init();
+updateUI();
+
+document.getElementById('startScreen').classList.add('hidden');
+document.getElementById('gameOverScreen').classList.add('hidden');
+
+requestAnimationFrame(gameLoop);
+}
+
+function gameOver() {
+gameActive = false;
+document.getElementById('finalScore').innerText = Bella caught ${score} toy mice!;
+document.getElementById('gameOverScreen').classList.remove('hidden');
+}
+
+function checkCollision(rect1, rect2) {
+return (
+rect1.x < rect2.x + rect2.width &&
+rect1.x + rect1.width > rect2.x &&
+rect1.y < rect2.y + rect2.height &&
+rect1.y + rect1.height > rect2.y
+);
+}
+
+function gameLoop() {
+if (!gameActive) return;
+
+ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+frameCount++;
+if (frameCount % 300 === 0) {
+speedMultiplier += 0.1;
+}
+
+if (frameCount % Math.max(20, Math.floor(spawnRate / speedMultiplier)) === 0) {
+items.push(new Item());
+}
+
+bella.update();
+bella.draw();
+
+for (let i = items.length - 1; i >= 0; i--) {
+const item = items[i];
+item.update();
+item.draw();
+
+if (checkCollision(bella, item)) {
+if (item.type === 'mouse') {
+score++;
+updateUI();
+} else if (item.type === 'sock') {
+lives--;
+updateUI();
+if (lives <= 0) {
+gameOver();
+}
+} else if (item.type === 'nip') {
+score += 3;
+updateUI();
+}
+items.splice(i, 1);
+continue;
+}
+
+if (item.y > canvas.height) {
+items.splice(i, 1);
+}
+}
+
+requestAnimationFrame(gameLoop);
+}
+
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('restartBtn').addEventListener('click', startGame);
+</script>
+</body>
+</html>
